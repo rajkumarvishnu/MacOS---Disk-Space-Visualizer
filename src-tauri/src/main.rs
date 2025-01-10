@@ -41,7 +41,7 @@ fn build_disk_item(path: &str) -> DiskItem {
                 let child_path = entry.path();
                 let child_str = child_path.to_string_lossy().to_string();
                 let child_item = build_disk_item(&child_str);
-                if child_item.size >= 5 * 1024 * 1024 {
+                if child_item.size >= 50 * 1024 * 1024 {
                     // Ignore folders less than 5MB
                     size += child_item.size;
                     children.push(child_item);

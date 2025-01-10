@@ -31,7 +31,8 @@ export default function Home() {
 			try {
 				console.log("Fetching disk utilization...");
 				const result = await invoke("get_disk_utilization", {
-					path: "/Users/vishnurajkumar/Developer/MacOS - Disk Space Visualizer",
+					//path: "/Users/vishnurajkumar/Developer/MacOS - Disk Space Visualizer",
+					path: "/Users/vishnurajkumar",
 				});
 				setDiskData(result);
 			} catch (error) {
