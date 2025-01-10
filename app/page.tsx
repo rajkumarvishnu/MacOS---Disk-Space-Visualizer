@@ -9,6 +9,22 @@ import { motion } from "framer-motion";
 export default function Home() {
 	const [diskData, setDiskData] = useState(null);
 	const [selectedItem, setSelectedItem] = useState(null);
+	const [dimensions, setDimensions] = useState({
+		width: typeof window !== "undefined" ? window.innerWidth - 40 : 800,
+		height: typeof window !== "undefined" ? window.innerHeight - 120 : 600,
+	});
+
+	useEffect(() => {
+		function handleResize() {
+			setDimensions({
+				width: window.innerWidth - 40,
+				height: window.innerHeight - 120,
+			});
+		}
+
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
+	}, []);
 
 	useEffect(() => {
 		async function fetchDiskData() {
@@ -157,8 +173,8 @@ export default function Home() {
 				{/* Dynamically size the treemap to fit remaining space */}
 				{diskData ? (
 					<Treemap
-						width={window.innerWidth - 40}
-						height={window.innerHeight - 120}
+						width={dimensions.width}
+						height={dimensions.height}
 						data={[renderTreemapItem(diskData)]}
 						dataKey="size"
 						ratio={4 / 3}
