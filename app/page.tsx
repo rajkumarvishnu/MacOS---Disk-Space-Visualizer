@@ -1,10 +1,10 @@
 "use client";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core"; // Correct import
-import { open } from "@tauri-apps/plugin-shell"; // Import open from tauri shell
-import { Treemap } from "recharts"; // Import Treemap from recharts
-import { motion } from "framer-motion"; // Import motion from framer-motion
+import { invoke } from "@tauri-apps/api/core";
+// Remove the Command import
+import { Treemap } from "recharts";
+import { motion } from "framer-motion";
 
 export default function Home() {
 	const [diskData, setDiskData] = useState(null);
@@ -26,9 +26,17 @@ export default function Home() {
 		fetchDiskData();
 	}, []);
 
-	function handleContextMenu(event, path) {
+	async function handleContextMenu(event, path) {
 		event.preventDefault();
-		open(`file://${path}`);
+		console.log(path);
+		console.log("Revealing path:", path["root"]); // Add logging for debugging
+		try {
+			await invoke("reveal_in_finder", {
+				path: path["root"].toString(), // Ensure path is a string
+			});
+		} catch (error) {
+			console.error("Failed to reveal in finder:", error);
+		}
 	}
 
 	function handleClick(item) {
@@ -41,6 +49,7 @@ export default function Home() {
 		return {
 			name: item.name.split("/").pop(), // Extract folder name
 			size: item.size,
+			root: item.name, // Keep the full path for Finder
 			children: item.children.map(renderTreemapItem),
 		};
 	}
@@ -53,6 +62,7 @@ export default function Home() {
 		height,
 		name,
 		size,
+		root,
 	}: {
 		depth: number;
 		x: number;
@@ -61,6 +71,7 @@ export default function Home() {
 		height: number;
 		name: string;
 		size: number;
+		root: string;
 	}) {
 		const sizeInMB = (size / (1024 * 1024)).toFixed(2);
 		// New color calculation based on size
@@ -74,6 +85,8 @@ export default function Home() {
 				initial={{ opacity: 0 }}
 				animate={{ opacity: 1 }}
 				transition={{ duration: 0.5 }}
+				onContextMenu={(e) => handleContextMenu(e, root)}
+				style={{ cursor: "context-menu" }}
 			>
 				<rect
 					x={x}
@@ -129,6 +142,16 @@ export default function Home() {
 				style={{ padding: "20px", fontSize: "24px", fontWeight: "500" }}
 			>
 				Disk Utilization
+				<span
+					style={{
+						fontSize: "14px",
+						opacity: 0.7,
+						marginLeft: "10px",
+						fontWeight: "normal",
+					}}
+				>
+					(Right-click to reveal in Finder)
+				</span>
 			</h1>
 			<div style={{ flex: 1, overflow: "auto" }}>
 				{/* Dynamically size the treemap to fit remaining space */}

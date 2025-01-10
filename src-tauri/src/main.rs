@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::process::Command;
 
 #[derive(Serialize, Deserialize)]
 struct DiskItem {
@@ -61,9 +62,22 @@ fn get_disk_utilization(path: String) -> Result<DiskItem, String> {
     Ok(build_disk_item(&path))
 }
 
+#[tauri::command]
+fn reveal_in_finder(path: String) -> Result<(), String> {
+    println!("Revealing in Finder: {}", path);
+    Command::new("open")
+        .args(["-R", &path])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_disk_utilization])
+        .invoke_handler(tauri::generate_handler![
+            get_disk_utilization,
+            reveal_in_finder
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
