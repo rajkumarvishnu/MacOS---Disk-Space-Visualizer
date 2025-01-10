@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core"; // Correct import
 import { open } from "@tauri-apps/plugin-shell"; // Import open from tauri shell
 import { Treemap } from "recharts"; // Import Treemap from recharts
+import { motion } from "framer-motion"; // Import motion from framer-motion
 
 export default function Home() {
 	const [diskData, setDiskData] = useState(null);
@@ -31,55 +32,142 @@ export default function Home() {
 	}
 
 	function handleClick(item) {
-		const f = item.name + " - " + item.size;
+		const f =
+			item.name + " - " + (item.size / (1024 * 1024)).toFixed(2) + " MB";
 		setSelectedItem(f);
 	}
 
 	function renderTreemapItem(item) {
 		return {
-			name: item.name,
+			name: item.name.split("/").pop(), // Extract folder name
 			size: item.size,
 			children: item.children.map(renderTreemapItem),
 		};
 	}
 
+	function CustomTreemapContent({
+		depth,
+		x,
+		y,
+		width,
+		height,
+		name,
+		size,
+	}: {
+		depth: number;
+		x: number;
+		y: number;
+		width: number;
+		height: number;
+		name: string;
+		size: number;
+	}) {
+		const sizeInMB = (size / (1024 * 1024)).toFixed(2);
+		// New color calculation based on size
+		const hue = Math.max(200, 280 - (sizeInMB / 100) * 80); // Range from purple to blue
+		const saturation = Math.min(90, 60 + (sizeInMB / 100) * 30); // Increase saturation with size
+		const lightness = Math.max(25, 45 - (sizeInMB / 100) * 20); // Darker for larger files
+		const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+
+		return (
+			<motion.g
+				initial={{ opacity: 0 }}
+				animate={{ opacity: 1 }}
+				transition={{ duration: 0.5 }}
+			>
+				<rect
+					x={x}
+					y={y}
+					width={width}
+					height={height}
+					style={{
+						fill: color,
+						stroke: "rgba(255,255,255,0.1)",
+						strokeWidth: 1,
+						strokeOpacity: 0.8,
+					}}
+				/>
+				{width > 40 && height > 20 && (
+					<text
+						x={x + 10}
+						y={y + 20}
+						fill="rgba(255,255,255,0.9)"
+						fontSize={14}
+					>
+						{name}
+					</text>
+				)}
+				{width > 40 && height > 40 && (
+					<text
+						x={x + 10}
+						y={y + 40}
+						fill="rgba(255,255,255,0.7)"
+						fontSize={12}
+					>
+						{sizeInMB} MB
+					</text>
+				)}
+			</motion.g>
+		);
+	}
+
 	return (
 		<div
 			style={{
-				backgroundColor: "green",
-				padding: "20px",
+				width: "100vw",
 				height: "100vh",
-				overflow: "auto",
+				margin: 0,
+				padding: 0,
+				overflow: "hidden",
+				background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)",
+				color: "#e2e8f0",
+				display: "flex",
+				flexDirection: "column",
 			}}
 		>
-			<h1>Disk Utilization</h1>
-			{diskData ? (
-				<Treemap
-					width={800}
-					height={600}
-					data={[renderTreemapItem(diskData)]}
-					dataKey="size"
-					ratio={4 / 3}
-					stroke="#fff"
-					fill="#8884d8"
-					onClick={(item) => handleClick(item)}
-				/>
-			) : (
-				<p>Loading...</p>
-			)}
+			<h1
+				style={{ padding: "20px", fontSize: "24px", fontWeight: "500" }}
+			>
+				Disk Utilization
+			</h1>
+			<div style={{ flex: 1, overflow: "auto" }}>
+				{/* Dynamically size the treemap to fit remaining space */}
+				{diskData ? (
+					<Treemap
+						width={window.innerWidth - 40}
+						height={window.innerHeight - 120}
+						data={[renderTreemapItem(diskData)]}
+						dataKey="size"
+						ratio={4 / 3}
+						stroke="#fff"
+						fill="#4f46e5" // Shadcn primary color
+						content={CustomTreemapContent}
+						onClick={(item) => handleClick(item)}
+					/>
+				) : (
+					<p>Loading...</p>
+				)}
+			</div>
 			{selectedItem && (
-				<div
+				<motion.div
+					initial={{ opacity: 0, y: 20 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.5 }}
 					style={{
 						position: "fixed",
-						bottom: "10px",
-						left: "10px",
-						backgroundColor: "white",
-						padding: "10px",
-						border: "1px solid black",
+						bottom: "20px",
+						left: "20px",
+						backgroundColor: "rgba(255, 255, 255, 0.1)",
+						backdropFilter: "blur(12px)",
+						padding: "15px 20px",
+						borderRadius: "12px",
+						border: "1px solid rgba(255, 255, 255, 0.1)",
+						color: "#fff",
+						boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
 					}}
 				>
-					<p>Selected Folder: {selectedItem}</p>
-				</div>
+					<p style={{ margin: 0 }}>Selected: {selectedItem}</p>
+				</motion.div>
 			)}
 		</div>
 	);
