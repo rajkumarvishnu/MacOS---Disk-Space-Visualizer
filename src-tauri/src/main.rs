@@ -1,4 +1,3 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Deserialize, Serialize};
@@ -12,7 +11,7 @@ struct DiskItem {
     children: Vec<DiskItem>,
 }
 
-fn build_disk_item(path: &str) -> DiskItem {
+async fn build_disk_item(path: &str) -> DiskItem {
     println!("Scanning path: {}", path);
 
     let metadata = match fs::metadata(path) {
@@ -40,9 +39,8 @@ fn build_disk_item(path: &str) -> DiskItem {
             for entry in entries.flatten() {
                 let child_path = entry.path();
                 let child_str = child_path.to_string_lossy().to_string();
-                let child_item = build_disk_item(&child_str);
+                let child_item = build_disk_item(&child_str).await;
                 if child_item.size >= 50 * 1024 * 1024 {
-                    // Ignore folders less than 5MB
                     size += child_item.size;
                     children.push(child_item);
                 }
@@ -58,12 +56,12 @@ fn build_disk_item(path: &str) -> DiskItem {
 }
 
 #[tauri::command]
-fn get_disk_utilization(path: String) -> Result<DiskItem, String> {
-    Ok(build_disk_item(&path))
+async fn get_disk_utilization(path: String) -> Result<DiskItem, String> {
+    Ok(build_disk_item(&path).await)
 }
 
 #[tauri::command]
-fn reveal_in_finder(path: String) -> Result<(), String> {
+async fn reveal_in_finder(path: String) -> Result<(), String> {
     println!("Revealing in Finder: {}", path);
     Command::new("open")
         .args(["-R", &path])
