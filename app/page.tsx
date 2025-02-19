@@ -16,7 +16,7 @@ export default function Home() {
 	const [filteredData, setFilteredData] = useState(null);
 	const [settings, setSettings] = useState({
 		colorScheme: "default",
-		animationSpeed: 0.5,
+		animationSpeed: 0.3,
 	});
 
 	useEffect(() => {
@@ -24,7 +24,7 @@ export default function Home() {
 			setDimensions({
 				width: window.innerWidth - 40,
 				height: window.innerHeight - 120,
-			});
+				});
 		}
 
 		window.addEventListener("resize", handleResize);
@@ -44,7 +44,10 @@ export default function Home() {
 			}
 		}
 
+		const intervalId = setInterval(fetchDiskData, 5000);
 		fetchDiskData();
+
+		return () => clearInterval(intervalId);
 	}, []);
 
 	useEffect(() => {
@@ -185,7 +188,7 @@ export default function Home() {
 				margin: 0,
 				padding: 0,
 				overflow: "hidden",
-				background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)",
+				background: "linear-gradient(135deg, #ff7e5f 0%, #feb47b 100%)",
 				color: "#e2e8f0",
 				display: "flex",
 				flexDirection: "column",
