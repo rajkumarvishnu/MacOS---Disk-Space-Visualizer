@@ -2,7 +2,6 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-// Remove the Command import
 import { Treemap } from "recharts";
 import { motion } from "framer-motion";
 
