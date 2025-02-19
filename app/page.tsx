@@ -2,7 +2,6 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-// Remove the Command import
 import { Treemap } from "recharts";
 import { motion } from "framer-motion";
 
@@ -12,6 +11,12 @@ export default function Home() {
 	const [dimensions, setDimensions] = useState({
 		width: typeof window !== "undefined" ? window.innerWidth - 40 : 800,
 		height: typeof window !== "undefined" ? window.innerHeight - 120 : 600,
+	});
+	const [searchQuery, setSearchQuery] = useState("");
+	const [filteredData, setFilteredData] = useState(null);
+	const [settings, setSettings] = useState({
+		colorScheme: "default",
+		animationSpeed: 0.5,
 	});
 
 	useEffect(() => {
@@ -31,7 +36,6 @@ export default function Home() {
 			try {
 				console.log("Fetching disk utilization...");
 				const result = await invoke("get_disk_utilization", {
-					//path: "/Users/vishnurajkumar/Developer/MacOS - Disk Space Visualizer",
 					path: "/Users/vishnurajkumar",
 				});
 				setDiskData(result);
@@ -43,13 +47,35 @@ export default function Home() {
 		fetchDiskData();
 	}, []);
 
+	useEffect(() => {
+		if (searchQuery) {
+			const filterItems = (item) => {
+				if (item.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+					return true;
+				}
+				if (item.children) {
+					return item.children.some(filterItems);
+				}
+				return false;
+			};
+
+			const filtered = {
+				...diskData,
+				children: diskData.children.filter(filterItems),
+			};
+			setFilteredData(filtered);
+		} else {
+			setFilteredData(diskData);
+		}
+	}, [searchQuery, diskData]);
+
 	async function handleContextMenu(event, path) {
 		event.preventDefault();
 		console.log(path);
-		console.log("Revealing path:", path["root"]); // Add logging for debugging
+		console.log("Revealing path:", path["root"]);
 		try {
 			await invoke("reveal_in_finder", {
-				path: path["root"].toString(), // Ensure path is a string
+				path: path["root"].toString(),
 			});
 		} catch (error) {
 			console.error("Failed to reveal in finder:", error);
@@ -64,9 +90,9 @@ export default function Home() {
 
 	function renderTreemapItem(item) {
 		return {
-			name: item.name.split("/").pop(), // Extract folder name
+			name: item.name.split("/").pop(),
 			size: item.size,
-			root: item.name, // Keep the full path for Finder
+			root: item.name,
 			children: item.children.map(renderTreemapItem),
 		};
 	}
@@ -91,17 +117,16 @@ export default function Home() {
 		root: string;
 	}) {
 		const sizeInMB = (size / (1024 * 1024)).toFixed(2);
-		// New color calculation based on size
-		const hue = Math.max(200, 280 - (sizeInMB / 100) * 80); // Range from purple to blue
-		const saturation = Math.min(90, 60 + (sizeInMB / 100) * 30); // Increase saturation with size
-		const lightness = Math.max(25, 45 - (sizeInMB / 100) * 20); // Darker for larger files
+		const hue = Math.max(200, 280 - (sizeInMB / 100) * 80);
+		const saturation = Math.min(90, 60 + (sizeInMB / 100) * 30);
+		const lightness = Math.max(25, 45 - (sizeInMB / 100) * 20);
 		const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 
 		return (
 			<motion.g
 				initial={{ opacity: 0 }}
 				animate={{ opacity: 1 }}
-				transition={{ duration: 0.5 }}
+				transition={{ duration: settings.animationSpeed }}
 				onContextMenu={(e) => handleContextMenu(e, root)}
 				style={{ cursor: "context-menu" }}
 			>
@@ -141,6 +166,17 @@ export default function Home() {
 		);
 	}
 
+	function handleExport() {
+		const dataStr = JSON.stringify(diskData, null, 2);
+		const blob = new Blob([dataStr], { type: "application/json" });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = "disk_utilization.json";
+		a.click();
+		URL.revokeObjectURL(url);
+	}
+
 	return (
 		<div
 			style={{
@@ -170,17 +206,33 @@ export default function Home() {
 					(Right-click to reveal in Finder)
 				</span>
 			</h1>
+			<div style={{ padding: "0 20px" }}>
+				<input
+					type="text"
+					placeholder="Search..."
+					value={searchQuery}
+					onChange={(e) => setSearchQuery(e.target.value)}
+					style={{
+						width: "100%",
+						padding: "10px",
+						marginBottom: "20px",
+						borderRadius: "8px",
+						border: "1px solid rgba(255, 255, 255, 0.1)",
+						backgroundColor: "rgba(255, 255, 255, 0.1)",
+						color: "#fff",
+					}}
+				/>
+			</div>
 			<div style={{ flex: 1, overflow: "auto" }}>
-				{/* Dynamically size the treemap to fit remaining space */}
-				{diskData ? (
+				{filteredData ? (
 					<Treemap
 						width={dimensions.width}
 						height={dimensions.height}
-						data={[renderTreemapItem(diskData)]}
+						data={[renderTreemapItem(filteredData)]}
 						dataKey="size"
 						ratio={4 / 3}
 						stroke="#fff"
-						fill="#4f46e5" // Shadcn primary color
+						fill="#4f46e5"
 						content={CustomTreemapContent}
 						onClick={(item) => handleClick(item)}
 					/>
@@ -209,6 +261,54 @@ export default function Home() {
 					<p style={{ margin: 0 }}>Selected: {selectedItem}</p>
 				</motion.div>
 			)}
+			<div style={{ padding: "20px", display: "flex", justifyContent: "space-between" }}>
+				<button
+					onClick={handleExport}
+					style={{
+						padding: "10px 20px",
+						borderRadius: "8px",
+						border: "none",
+						backgroundColor: "#4f46e5",
+						color: "#fff",
+						cursor: "pointer",
+					}}
+				>
+					Export to JSON
+				</button>
+				<button
+					onClick={() => setSettings({ ...settings, colorScheme: settings.colorScheme === "default" ? "dark" : "default" })}
+					style={{
+						padding: "10px 20px",
+						borderRadius: "8px",
+						border: "none",
+						backgroundColor: "#4f46e5",
+						color: "#fff",
+						cursor: "pointer",
+					}}
+				>
+					Toggle Color Scheme
+				</button>
+				<button
+					onClick={() => setSettings({ ...settings, animationSpeed: settings.animationSpeed === 0.5 ? 1 : 0.5 })}
+					style={{
+						padding: "10px 20px",
+						borderRadius: "8px",
+						border: "none",
+						backgroundColor: "#4f46e5",
+						color: "#fff",
+						cursor: "pointer",
+					}}
+				>
+					Toggle Animation Speed
+				</button>
+			</div>
+			<div style={{ padding: "20px" }}>
+				<h2>Help</h2>
+				<p>Use the search bar to filter disk items by name.</p>
+				<p>Right-click on a disk item to reveal it in Finder.</p>
+				<p>Use the settings panel to customize the color scheme and animation speed.</p>
+				<p>Click the "Export to JSON" button to save the disk utilization data to a JSON file.</p>
+			</div>
 		</div>
 	);
 }
