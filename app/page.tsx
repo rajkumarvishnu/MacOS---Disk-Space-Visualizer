@@ -18,8 +18,11 @@ export default function Home() {
 	const data = listen<string>("disk", (event) => {
 		try {
 			const parsedData = JSON.parse(event.payload);
-			setDiskData(parsedData);
-			console.log("Received periodic disk data:", parsedData);
+			const disk = Array.isArray(parsedData)
+				? { name: "root", size: 0, children: parsedData }
+				: parsedData;
+			setDiskData(disk);
+			console.log("Received periodic disk data:", disk);
 		} catch (error) {
 			console.error("Failed to parse disk data:", error);
 		}

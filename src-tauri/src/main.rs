@@ -43,7 +43,7 @@ fn build_disk_item<R: Runtime>(app: &AppHandle<R>, path: &str) -> DiskItem {
     let mut children = Vec::new();
 
     if metadata.is_dir() {
-        println!("Reading directory: {}", path);
+        //println!("Reading directory: {}", path);
         if let Ok(entries) = fs::read_dir(path) {
             for entry in entries.flatten() {
                 let child_path = entry.path();
