@@ -76,12 +76,23 @@ export default function Home() {
 		setSelectedItem(f);
 	}
 
+	function filterChildren(children: any[]): any[] {
+		// Return unchanged if there are no children
+		if (!children || children.length === 0) return children;
+		// Sort children descending by size
+		const sorted = [...children].sort((a, b) => b.size - a.size);
+		const medianIndex = Math.floor(sorted.length / 2);
+		const medianSize = sorted[medianIndex].size;
+		// Return children with size greater or equal than the median
+		return children.filter((child) => child.size >= medianSize);
+	}
+
 	function renderTreemapItem(item) {
 		return {
 			name: item.name.split("/").pop(), // Extract folder name
 			size: item.size,
 			root: item.name, // Keep the full path for Finder
-			children: item.children.map(renderTreemapItem),
+			children: filterChildren(item.children).map(renderTreemapItem),
 		};
 	}
 
