@@ -56,13 +56,14 @@ export default function Home() {
 		fetchDiskData();
 	}, []);
 
-	async function handleContextMenu(event, path) {
+	async function handleContextMenu(event, path, name) {
 		event.preventDefault();
-		console.log(path);
-		console.log("Revealing path:", path["root"]); // Add logging for debugging
+		console.log("Right-clicked on item:", path);
+		console.log("Event:", event);
+		console.log("Revealing path:", path["root"] + "/" + name); // Add logging for debugging
 		try {
 			await invoke("reveal_in_finder", {
-				path: path["root"].toString(), // Ensure path is a string
+				path: path["root"].toString() + "/" + name, // Ensure full path is used
 			});
 		} catch (error) {
 			console.error("Failed to reveal in finder:", error);
@@ -115,7 +116,7 @@ export default function Home() {
 				initial={{ opacity: 0 }}
 				animate={{ opacity: 1 }}
 				transition={{ duration: 0.5 }}
-				onContextMenu={(e) => handleContextMenu(e, root)}
+				onContextMenu={(e) => handleContextMenu(e, root, name)}
 				style={{ cursor: "context-menu" }}
 			>
 				<rect
