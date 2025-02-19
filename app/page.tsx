@@ -2,7 +2,6 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-// Remove the Command import
 import { Treemap } from "recharts";
 import { motion } from "framer-motion";
 
@@ -57,13 +56,14 @@ export default function Home() {
 		fetchDiskData();
 	}, []);
 
-	async function handleContextMenu(event, path) {
+	async function handleContextMenu(event, path, name) {
 		event.preventDefault();
-		console.log(path);
-		console.log("Revealing path:", path["root"]); // Add logging for debugging
+		console.log("Right-clicked on item:", path);
+		console.log("Event:", event);
+		console.log("Revealing path:", path["root"] + "/" + name); // Add logging for debugging
 		try {
 			await invoke("reveal_in_finder", {
-				path: path["root"].toString(), // Ensure path is a string
+				path: path["root"].toString() + "/" + name, // Ensure full path is used
 			});
 		} catch (error) {
 			console.error("Failed to reveal in finder:", error);
@@ -76,12 +76,23 @@ export default function Home() {
 		setSelectedItem(f);
 	}
 
+	function filterChildren(children: any[]): any[] {
+		// Return unchanged if there are no children
+		if (!children || children.length === 0) return children;
+		// Sort children descending by size
+		const sorted = [...children].sort((a, b) => b.size - a.size);
+		const medianIndex = Math.floor(sorted.length / 2);
+		const medianSize = sorted[medianIndex].size;
+		// Return children with size greater or equal than the median
+		return children.filter((child) => child.size >= medianSize);
+	}
+
 	function renderTreemapItem(item) {
 		return {
 			name: item.name.split("/").pop(), // Extract folder name
 			size: item.size,
 			root: item.name, // Keep the full path for Finder
-			children: item.children.map(renderTreemapItem),
+			children: filterChildren(item.children).map(renderTreemapItem),
 		};
 	}
 
@@ -116,7 +127,7 @@ export default function Home() {
 				initial={{ opacity: 0 }}
 				animate={{ opacity: 1 }}
 				transition={{ duration: 0.5 }}
-				onContextMenu={(e) => handleContextMenu(e, root)}
+				onContextMenu={(e) => handleContextMenu(e, root, name)}
 				style={{ cursor: "context-menu" }}
 			>
 				<rect
@@ -163,8 +174,8 @@ export default function Home() {
 				margin: 0,
 				padding: 0,
 				overflow: "hidden",
-				background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)",
-				color: "#e2e8f0",
+				background: "var(--background)",
+				color: "var(--foreground)",
 				display: "flex",
 				flexDirection: "column",
 			}}
@@ -194,7 +205,7 @@ export default function Home() {
 						dataKey="size"
 						ratio={4 / 3}
 						stroke="#fff"
-						fill="#4f46e5" // Shadcn primary color
+						fill="var(--primary)" // Shadcn primary color
 						content={CustomTreemapContent}
 						onClick={(item) => handleClick(item)}
 					/>
