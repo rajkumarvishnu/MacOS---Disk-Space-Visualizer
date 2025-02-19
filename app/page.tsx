@@ -174,8 +174,8 @@ export default function Home() {
 				margin: 0,
 				padding: 0,
 				overflow: "hidden",
-				background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)",
-				color: "#e2e8f0",
+				background: "var(--background)",
+				color: "var(--foreground)",
 				display: "flex",
 				flexDirection: "column",
 			}}
@@ -205,7 +205,7 @@ export default function Home() {
 						dataKey="size"
 						ratio={4 / 3}
 						stroke="#fff"
-						fill="#4f46e5" // Shadcn primary color
+						fill="var(--primary)" // Shadcn primary color
 						content={CustomTreemapContent}
 						onClick={(item) => handleClick(item)}
 					/>
