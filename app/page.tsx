@@ -1,32 +1,73 @@
 "use client";
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Treemap } from "recharts";
 import { motion } from "framer-motion";
-
 import { listen } from "@tauri-apps/api/event";
 
+// Define TypeScript interfaces
+interface DiskItem {
+	name: string;
+	size: number;
+	children: DiskItem[];
+	root?: string;
+}
+
+interface TreemapContentProps {
+	depth: number;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	name: string;
+	size: number;
+	root: string;
+}
+
 export default function Home() {
-	const [diskData, setDiskData] = useState(null);
-	const [selectedItem, setSelectedItem] = useState(null);
+	const [diskData, setDiskData] = useState<DiskItem | null>(null);
+	const [selectedItem, setSelectedItem] = useState<string | null>(null);
 	const [dimensions, setDimensions] = useState({
 		width: typeof window !== "undefined" ? window.innerWidth - 40 : 800,
 		height: typeof window !== "undefined" ? window.innerHeight - 120 : 600,
 	});
-	const data = listen<string>("disk", (event) => {
-		try {
-			const parsedData = JSON.parse(event.payload);
-			const disk = Array.isArray(parsedData)
-				? { name: "root", size: 0, children: parsedData }
-				: parsedData;
-			setDiskData(disk);
-			console.log("Received periodic disk data:", disk);
-		} catch (error) {
-			console.error("Failed to parse disk data:", error);
-		}
-	});
+	const [directory, setDirectory] = useState(
+		"/Users/vishnurajkumar/Developer"
+	);
 
+	// File size filter sliders
+	const [minSizeMB, setMinSizeMB] = useState<number>(5);
+	const [maxSizeMB, setMaxSizeMB] = useState<number | null>(null);
+	const [maxSizeForSlider, setMaxSizeForSlider] = useState<number>(1000); // Default max for slider
+
+	// Listen for disk data events
+	useEffect(() => {
+		const unlisten = listen<string>("disk", (event) => {
+			try {
+				const parsedData = JSON.parse(event.payload);
+				const disk = Array.isArray(parsedData)
+					? { name: "root", size: 0, children: parsedData }
+					: parsedData;
+				setDiskData(disk);
+				console.log("Received periodic disk data:", disk);
+
+				// Update max size slider based on actual data if needed
+				if (disk && disk.size > 0) {
+					const sizeInMB = disk.size / (1024 * 1024);
+					const roundedMax = Math.ceil(sizeInMB / 100) * 100; // Round up to nearest 100MB
+					setMaxSizeForSlider(Math.max(roundedMax, 1000));
+				}
+			} catch (error) {
+				console.error("Failed to parse disk data:", error);
+			}
+		});
+
+		return () => {
+			unlisten.then((fn) => fn());
+		};
+	}, []);
+
+	// Handle window resize
 	useEffect(() => {
 		function handleResize() {
 			setDimensions({
@@ -34,68 +75,63 @@ export default function Home() {
 				height: window.innerHeight - 120,
 			});
 		}
-
 		window.addEventListener("resize", handleResize);
 		return () => window.removeEventListener("resize", handleResize);
 	}, []);
 
+	// Fetch disk data
 	useEffect(() => {
 		async function fetchDiskData() {
 			try {
 				console.log("Fetching disk utilization...");
-				const result = await invoke("get_disk_utilization", {
-					path: "/Users/vishnurajkumar/Developer",
-					//path: "/Users/vishnurajkumar",
+				const result = await invoke<DiskItem>("get_disk_utilization", {
+					path: directory,
+					minSizeMb: minSizeMB,
+					maxSizeMb: maxSizeMB,
 				});
 				setDiskData(result);
 			} catch (error) {
 				console.error("Failed to fetch disk utilization:", error);
 			}
 		}
-
 		fetchDiskData();
-	}, []);
+	}, [directory, minSizeMB, maxSizeMB]);
 
-	async function handleContextMenu(event, path, name) {
+	// Handle context menu
+	async function handleContextMenu(
+		event: React.MouseEvent,
+		path: { root: string }
+	) {
 		event.preventDefault();
-		console.log("Right-clicked on item:", path);
-		console.log("Event:", event);
-		console.log("Revealing path:", path["root"] + "/" + name); // Add logging for debugging
+		console.log(path);
+		console.log("Revealing path:", path["root"]); // Add logging for debugging
 		try {
 			await invoke("reveal_in_finder", {
-				path: path["root"].toString() + "/" + name, // Ensure full path is used
+				path: path["root"].toString(), // Ensure path is a string
 			});
 		} catch (error) {
 			console.error("Failed to reveal in finder:", error);
 		}
 	}
 
-	function handleClick(item) {
+	// Handle item click
+	function handleClick(item: DiskItem) {
 		const f =
 			item.name + " - " + (item.size / (1024 * 1024)).toFixed(2) + " MB";
 		setSelectedItem(f);
 	}
 
-	function filterChildren(children: any[]): any[] {
-		// Return unchanged if there are no children
-		if (!children || children.length === 0) return children;
-		// Sort children descending by size
-		const sorted = [...children].sort((a, b) => b.size - a.size);
-		const medianIndex = Math.floor(sorted.length / 2);
-		const medianSize = sorted[medianIndex].size;
-		// Return children with size greater or equal than the median
-		return children.filter((child) => child.size >= medianSize);
-	}
-
-	function renderTreemapItem(item) {
+	// Render treemap item
+	function renderTreemapItem(item: DiskItem): DiskItem {
 		return {
-			name: item.name.split("/").pop(), // Extract folder name
+			name: item.name.split("/").pop() || item.name, // Extract folder name
 			size: item.size,
 			root: item.name, // Keep the full path for Finder
-			children: filterChildren(item.children).map(renderTreemapItem),
+			children: item.children.map(renderTreemapItem),
 		};
 	}
 
+	// Custom treemap content
 	function CustomTreemapContent({
 		depth,
 		x,
@@ -105,21 +141,13 @@ export default function Home() {
 		name,
 		size,
 		root,
-	}: {
-		depth: number;
-		x: number;
-		y: number;
-		width: number;
-		height: number;
-		name: string;
-		size: number;
-		root: string;
-	}) {
+	}: TreemapContentProps) {
 		const sizeInMB = (size / (1024 * 1024)).toFixed(2);
 		// New color calculation based on size
-		const hue = Math.max(200, 280 - (sizeInMB / 100) * 80); // Range from purple to blue
-		const saturation = Math.min(90, 60 + (sizeInMB / 100) * 30); // Increase saturation with size
-		const lightness = Math.max(25, 45 - (sizeInMB / 100) * 20); // Darker for larger files
+		const sizeNumber = parseFloat(sizeInMB);
+		const hue = Math.max(200, 280 - (sizeNumber / 100) * 80); // Range from purple to blue
+		const saturation = Math.min(90, 60 + (sizeNumber / 100) * 30); // Increase saturation with size
+		const lightness = Math.max(25, 45 - (sizeNumber / 100) * 20); // Darker for larger files
 		const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 
 		return (
@@ -127,7 +155,7 @@ export default function Home() {
 				initial={{ opacity: 0 }}
 				animate={{ opacity: 1 }}
 				transition={{ duration: 0.5 }}
-				onContextMenu={(e) => handleContextMenu(e, root, name)}
+				onContextMenu={(e) => handleContextMenu(e, { root })}
 				style={{ cursor: "context-menu" }}
 			>
 				<rect
@@ -166,6 +194,27 @@ export default function Home() {
 		);
 	}
 
+	// Handle directory change
+	function handleDirectoryChange(event: React.ChangeEvent<HTMLInputElement>) {
+		setDirectory(event.target.value);
+	}
+
+	// Handle slider changes
+	function handleMinSizeChange(event: React.ChangeEvent<HTMLInputElement>) {
+		const value = Number(event.target.value);
+		setMinSizeMB(value);
+		// Ensure min doesn't exceed max if max is set
+		if (maxSizeMB !== null && value > maxSizeMB) {
+			setMaxSizeMB(value);
+		}
+	}
+
+	function handleMaxSizeChange(event: React.ChangeEvent<HTMLInputElement>) {
+		const value = Number(event.target.value);
+		// A value of maxSizeForSlider means "no limit"
+		setMaxSizeMB(value === maxSizeForSlider ? null : value);
+	}
+
 	return (
 		<div
 			style={{
@@ -174,8 +223,8 @@ export default function Home() {
 				margin: 0,
 				padding: 0,
 				overflow: "hidden",
-				background: "var(--background)",
-				color: "var(--foreground)",
+				background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)",
+				color: "#e2e8f0",
 				display: "flex",
 				flexDirection: "column",
 			}}
@@ -195,6 +244,80 @@ export default function Home() {
 					(Right-click to reveal in Finder)
 				</span>
 			</h1>
+			<div style={{ padding: "0 20px 20px 20px" }}>
+				<div style={{ marginBottom: "15px" }}>
+					<label htmlFor="directory" style={{ marginRight: "10px" }}>
+						Directory:
+					</label>
+					<input
+						type="text"
+						id="directory"
+						value={directory}
+						onChange={handleDirectoryChange}
+						style={{
+							padding: "5px 10px",
+							borderRadius: "5px",
+							border: "1px solid #e2e8f0",
+							backgroundColor: "#1e1b4b",
+							color: "#e2e8f0",
+							width: "60%",
+						}}
+					/>
+				</div>
+
+				{/* File size filter sliders */}
+				<div
+					style={{
+						display: "flex",
+						flexDirection: "column",
+						gap: "10px",
+						marginBottom: "10px",
+					}}
+				>
+					<div>
+						<label
+							htmlFor="min-size"
+							style={{ display: "block", marginBottom: "5px" }}
+						>
+							Minimum file size: {minSizeMB} MB
+						</label>
+						<input
+							type="range"
+							id="min-size"
+							min="0"
+							max={maxSizeForSlider}
+							value={minSizeMB}
+							onChange={handleMinSizeChange}
+							style={{ width: "60%", accentColor: "#4f46e5" }}
+						/>
+					</div>
+
+					<div>
+						<label
+							htmlFor="max-size"
+							style={{ display: "block", marginBottom: "5px" }}
+						>
+							Maximum file size:{" "}
+							{maxSizeMB === null
+								? "No limit"
+								: `${maxSizeMB} MB`}
+						</label>
+						<input
+							type="range"
+							id="max-size"
+							min={minSizeMB}
+							max={maxSizeForSlider}
+							value={
+								maxSizeMB === null
+									? maxSizeForSlider
+									: maxSizeMB
+							}
+							onChange={handleMaxSizeChange}
+							style={{ width: "60%", accentColor: "#4f46e5" }}
+						/>
+					</div>
+				</div>
+			</div>
 			<div style={{ flex: 1, overflow: "auto" }}>
 				{/* Dynamically size the treemap to fit remaining space */}
 				{diskData ? (
@@ -205,9 +328,11 @@ export default function Home() {
 						dataKey="size"
 						ratio={4 / 3}
 						stroke="#fff"
-						fill="var(--primary)" // Shadcn primary color
-						content={CustomTreemapContent}
-						onClick={(item) => handleClick(item)}
+						fill="#4f46e5" // Shadcn primary color
+						content={CustomTreemapContent as any}
+						onClick={(item) =>
+							handleClick(item as unknown as DiskItem)
+						}
 					/>
 				) : (
 					<p>Loading...</p>

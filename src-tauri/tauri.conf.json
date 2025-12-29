@@ -21,19 +21,6 @@
     ],
     "security": {
       "csp": null
-    },
-    "tray": {
-      "iconPath": "icons/icon.png",
-      "menu": [
-        {
-          "title": "Open",
-          "onClick": "open"
-        },
-        {
-          "title": "Quit",
-          "onClick": "quit"
-        }
-      ]
     }
   },
   "bundle": {

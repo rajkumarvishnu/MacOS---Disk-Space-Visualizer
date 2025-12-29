@@ -6,7 +6,9 @@ use std::fs;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, Runtime, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem};
+use tauri::{AppHandle, Emitter, Runtime, Manager};
+use tauri::menu::{MenuBuilder, MenuItem};
+use tauri::tray::TrayIconBuilder;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct DiskItem {
@@ -19,11 +21,16 @@ lazy_static! {
     static ref LAST_EMIT: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
 }
 
-fn build_disk_item<R: Runtime>(app: &AppHandle<R>, path: &str) -> DiskItem {
+fn build_disk_item<R: Runtime>(
+    app: &AppHandle<R>,
+    path: &str,
+    min_size: u64,
+    max_size: Option<u64>,
+) -> DiskItem {
     let metadata = match fs::metadata(path) {
         Ok(m) => m,
-        Err(_) => {
-            println!("Failed to read metadata for {}", path);
+        Err(e) => {
+            println!("Failed to read metadata for {}: {}", path, e);
             return DiskItem {
                 name: path.to_string(),
                 size: 0,
@@ -44,8 +51,12 @@ fn build_disk_item<R: Runtime>(app: &AppHandle<R>, path: &str) -> DiskItem {
             for entry in entries.flatten() {
                 let child_path = entry.path();
                 let child_str = child_path.to_string_lossy().to_string();
-                let child_item = build_disk_item(app, &child_str);
-                if child_item.size >= 5 * 1024 * 1024 {
+                let child_item = build_disk_item(app, &child_str, min_size, max_size);
+
+                // Apply size filters
+                if child_item.size >= min_size
+                    && max_size.map_or(true, |max| child_item.size <= max)
+                {
                     size += child_item.size;
                     children.push(child_item);
                 }
@@ -75,8 +86,22 @@ fn build_disk_item<R: Runtime>(app: &AppHandle<R>, path: &str) -> DiskItem {
 }
 
 #[tauri::command]
-fn get_disk_utilization<R: Runtime>(path: String, app: AppHandle<R>) -> Result<DiskItem, String> {
-    Ok(build_disk_item(&app, &path))
+fn get_disk_utilization<R: Runtime>(
+    path: String,
+    min_size_mb: Option<f64>,
+    max_size_mb: Option<f64>,
+    app: AppHandle<R>,
+) -> Result<DiskItem, String> {
+    // Convert MB to bytes
+    let min_size = min_size_mb.unwrap_or(5.0) * 1024.0 * 1024.0;
+    let max_size = max_size_mb.map(|max| max * 1024.0 * 1024.0);
+
+    Ok(build_disk_item(
+        &app,
+        &path,
+        min_size as u64,
+        max_size.map(|max| max as u64),
+    ))
 }
 
 #[tauri::command]
@@ -85,34 +110,38 @@ fn reveal_in_finder(path: String) -> Result<(), String> {
     Command::new("open")
         .args(["-R", &path])
         .spawn()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to reveal in Finder: {}", e))?;
     Ok(())
 }
 
 fn main() {
-    let tray_menu = SystemTrayMenu::new()
-        .add_item(SystemTrayMenuItem::new("Open", "open"))
-        .add_item(SystemTrayMenuItem::new("Quit", "quit"));
-
-    let system_tray = SystemTray::new().with_menu(tray_menu);
-
     tauri::Builder::default()
-        .system_tray(system_tray)
-        .on_system_tray_event(|app, event| match event {
-            SystemTrayEvent::MenuItemClick { id, .. } => {
-                match id.as_str() {
-                    "open" => {
-                        let window = app.get_window("main").unwrap();
-                        window.show().unwrap();
-                        window.set_focus().unwrap();
+        .setup(|app| {
+            let menu = MenuBuilder::new(app)
+                .item(&MenuItem::with_id(app, "open", "Open", true, None::<&str>)?)
+                .separator()
+                .item(&MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?)
+                .build()?;
+
+            let _tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .on_menu_event(|app, event| {
+                    match event.id().as_ref() {
+                        "open" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            std::process::exit(0);
+                        }
+                        _ => {}
                     }
-                    "quit" => {
-                        std::process::exit(0);
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
+                })
+                .build(app)?;
+
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_disk_utilization,
